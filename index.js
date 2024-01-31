@@ -78,6 +78,10 @@ client.on("interactionCreate", async (interaction) => {
 
         if (!info) return interaction.reply("Nie znaleziono gracza.");
 
+        info.servers.sort(
+            (a, b) => new Date(b.last_seen) - new Date(a.last_seen)
+        );
+
         const formattedServers = info.servers.map((server) => {
             const date = new Date(server.last_seen);
             const fd = date.toLocaleString("pl-PL", {
