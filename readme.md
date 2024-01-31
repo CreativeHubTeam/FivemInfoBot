@@ -13,4 +13,4 @@ Example Discord Bot that use CHub API to get info about fivem player activitie. 
 
 In this project we used private CHub API.<br/>
 To obtain an API key, you need to contact with one of [CHub Team](https://chub.pl) members. <br/>
-Documentation for the API you can find [here](http://api.chub.pl/).
+Documentation for the API you can find [here](http://api.chub.pl/docs).
