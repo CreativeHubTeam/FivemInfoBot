@@ -78,6 +78,25 @@ client.on("interactionCreate", async (interaction) => {
 
         if (!info) return interaction.reply("Nie znaleziono gracza.");
 
+        const formattedServers = info.servers.map((server) => {
+            const date = new Date(server.last_seen);
+            const fd = date.toLocaleString("pl-PL", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+            });
+
+            return {
+                name: `Nazwa serwera: ${server.hostname.replaceAll(
+                    /\^\d/g,
+                    ""
+                )}`,
+                value: `Ostatni connect: ${fd}`,
+            };
+        });
+
         await interaction.reply({
             embeds: [
                 new EmbedBuilder()
@@ -87,16 +106,10 @@ client.on("interactionCreate", async (interaction) => {
                             name: "Identifiers",
                             value: `${info.discord}\n${info.steam}\n${info.license}`,
                         },
-                        {
-                            name: "Servers",
-                            value: info.servers
-                                .map(
-                                    (server) =>
-                                        `${server.hostname} - ${server.last_seen}`
-                                )
-                                .join("\n"),
-                        },
-                    ]),
+                        ...formattedServers,
+                    ])
+                    .setFooter({ text: "©️ CreativeHub hosted by Trujca.gg" })
+                    .setTimestamp(),
             ],
         });
     }
