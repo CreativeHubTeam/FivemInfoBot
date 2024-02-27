@@ -45,7 +45,7 @@ client.on("ready", () => {
 
 async function getPlayerInfo(query) {
     const searchUrl =
-        "https://api.chub.pl/fivem/players/search?" +
+        "https://api.chub.pl/fivem/players/advance?" +
         new URLSearchParams({ query: query });
 
     const res = await fetch(searchUrl, {
@@ -53,19 +53,9 @@ async function getPlayerInfo(query) {
         headers: { Authorization: `Bearer ${process.env.TOKEN}` },
     });
 
-    const players = await res.json();
+    const player = await res.json();
 
-    if (!players || players.length <= 0) return null;
-
-    const res2 = await fetch(
-        `https://api.chub.pl/fivem/players/${players[0].id}/servers`,
-        {
-            method: "GET",
-            headers: { Authorization: `Bearer ${process.env.TOKEN}` },
-        }
-    );
-
-    return { ...players[0], servers: await res2.json() };
+    return player;
 }
 
 client.on("interactionCreate", async (interaction) => {
@@ -78,11 +68,11 @@ client.on("interactionCreate", async (interaction) => {
 
         if (!info) return interaction.reply("Nie znaleziono gracza.");
 
-        info.servers.sort(
+        info.activities.sort(
             (a, b) => new Date(b.last_seen) - new Date(a.last_seen)
         );
 
-        const formattedServers = info.servers.map((server) => {
+        const formattedServers = info.activities.map((server) => {
             const date = new Date(server.last_seen);
             const fd = date.toLocaleString("pl-PL", {
                 year: "numeric",
@@ -104,11 +94,15 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.reply({
             embeds: [
                 new EmbedBuilder()
-                    .setTitle(`[${info.id}] ${info.name}`)
+                    // .setTitle(`[${info.id}] ${info.name}`)
                     .addFields([
                         {
+                            name: "Names",
+                            value: info.names.join(`\n`),
+                        },
+                        {
                             name: "Identifiers",
-                            value: `${info.discord}\n${info.steam}\n${info.license}`,
+                            value: info.identifiers.join(`\n`),
                         },
                         ...formattedServers,
                     ])
