@@ -66,7 +66,7 @@ client.on("interactionCreate", async (interaction) => {
             interaction.options.getString("query")
         );
 
-        if (!info) return interaction.reply("Nie znaleziono gracza.");
+        if (!info?.names) return interaction.reply("Nie znaleziono gracza.");
 
         info.activities.sort(
             (a, b) => new Date(b.last_seen) - new Date(a.last_seen)
