@@ -9,9 +9,6 @@ import {
 import dotenv from "dotenv";
 dotenv.config();
 
-const TOKEN = process.env.TOKEN_BOT;
-const CLIENT_ID = process.env.CLIENT_ID_BOT;
-
 const commands = [
     new SlashCommandBuilder()
         .setName("info")
@@ -23,14 +20,24 @@ const commands = [
                 .setRequired(true)
         )
         .setDefaultMemberPermissions("0"),
+    new SlashCommandBuilder()
+        .setName("info2")
+        .setDescription("Advance info about Fivem player")
+        .addStringOption((option) =>
+            option
+                .setName("query")
+                .setDescription("Player name/discord/steam")
+                .setRequired(true)
+        )
+        .setDefaultMemberPermissions("0"),
 ];
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
+const rest = new REST({ version: "10" }).setToken("");
 
 try {
     console.log("Started refreshing application (/) commands.");
 
-    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+    await rest.put(Routes.applicationCommands('1200914828022268025', '1216422989650984960'), { body: commands });
 
     console.log("Successfully reloaded application (/) commands.");
 } catch (error) {
@@ -43,80 +50,100 @@ client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}!`);
 });
 
-async function getPlayerInfo(query) {
-    const searchUrl =
-        "https://api.chub.pl/fivem/players/search?" +
-        new URLSearchParams({ query: query });
+/**
+ * Execute an API request to a specified endpoint with query parameters and return the JSON response.
+ *
+ * @param {string} endpoint The API endpoint to request.
+ * @param {Object} params Query parameters for the request.
+ * @returns {Promise<any>} The JSON response from the API.
+ */
+async function apiRequest(endpoint, params) {
+    const baseUrl = "https://api.chub.pl/fivem/players";
+    const searchParams = new URLSearchParams(params);
+    const url = `${baseUrl}/${endpoint}?${searchParams}`;
 
-    const res = await fetch(searchUrl, {
+    const response = await fetch(url, {
         method: "GET",
-        headers: { Authorization: `Bearer ${process.env.TOKEN}` },
+        headers: { Authorization: `` },
     });
 
-    const players = await res.json();
+    return response.json();
+}
 
-    if (!players || players.length <= 0) return null;
+/**
+ * Retrieve basic player information and the first player's server details.
+ *
+ * @param {string} query Search query to find the player.
+ * @returns {Promise<Object|null>} Basic player info along with server details, or null if not found.
+ */
+async function getPlayerInfo(query) {
+    const players = await apiRequest("search", { query });
+    if (!players || players.length === 0) return null;
 
-    const res2 = await fetch(
-        `https://api.chub.pl/fivem/players/${players[0].id}/servers`,
-        {
-            method: "GET",
-            headers: { Authorization: `Bearer ${process.env.TOKEN}` },
-        }
-    );
+    const servers = await apiRequest(`${players[0].id}/servers`, {});
+    console.log(JSON.stringify(players[0]))
+    return { ...players[0], servers };
+}
 
-    return { ...players[0], servers: await res2.json() };
+/**
+ * Retrieve advanced player information based on a search query.
+ *
+ * @param {string} query Search query to find the player.
+ * @returns {Promise<Object>} Advanced player information.
+ */
+async function getPlayerAdvanceInfo(query) {
+    const info = await apiRequest("advance", { query });
+
+    if (info.identifiers) {
+        info.identifiers = info.identifiers.map(identifier => {
+            return identifier.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, '***.***.***.***');
+        });
+    }
+
+    return info;
 }
 
 client.on("interactionCreate", async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
+    try {
+    if (!interaction.isChatInputCommand() || !["info", "info2"].includes(interaction.commandName)) return;
 
-    if (interaction.commandName === "info") {
-        const info = await getPlayerInfo(
-            interaction.options.getString("query")
-        );
 
-        if (!info) return interaction.reply("Nie znaleziono gracza.");
+        const info = await (interaction.commandName === "info" ? getPlayerInfo : getPlayerAdvanceInfo)(interaction.options.getString("query"));
+        if (!info) return interaction.reply({ content: "Nie znaleziono gracza.", ephemeral: true });
 
-        info.servers.sort(
-            (a, b) => new Date(b.last_seen) - new Date(a.last_seen)
-        );
+        const embed = new EmbedBuilder()
+            .setTimestamp()
+            .setFooter({ text: "©️ CreativeHub hosted by Trujca.gg" });
 
-        const formattedServers = info.servers.map((server) => {
-            const date = new Date(server.last_seen);
-            const fd = date.toLocaleString("pl-PL", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
+        if (interaction.commandName === "info" && info.id && info.name) {
+            embed.setTitle(`[${info.id}] ${info.name}`);
+            ['steam', 'license', 'discord'].forEach(key => {
+                if (info[key]) embed.addFields({ name: key.charAt(0).toUpperCase() + key.slice(1), value: info[key], inline: true });
             });
+        } else if (interaction.commandName === "info2") {
+            ['names', 'identifiers'].forEach(key => {
+                if (info[key]?.length) embed.addFields({ name: key.charAt(0).toUpperCase() + key.slice(1), value: info[key].join('\n'), inline: false });
+            });
+        }
 
-            return {
-                name: `Nazwa serwera: ${server.hostname.replaceAll(
-                    /\^\d/g,
-                    ""
-                )}`,
-                value: `Ostatni connect: ${fd}`,
-            };
-        });
+        const elements = (info.servers || info.activities)?.sort((a, b) => b.last_seen.localeCompare(a.last_seen)).slice(0, 20) || [];
+        elements.forEach(({ hostname, last_seen }) => embed.addFields({
+            name: `Nazwa serwera: ${hostname.replaceAll(/\^\d/g, "")}`,
+            value: `Ostatni connect: ${new Date(last_seen).toLocaleString("pl-PL")}`,
+            inline: false
+        }));
 
-        await interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle(`[${info.id}] ${info.name}`)
-                    .addFields([
-                        {
-                            name: "Identifiers",
-                            value: `${info.discord}\n${info.steam}\n${info.license}`,
-                        },
-                        ...formattedServers,
-                    ])
-                    .setFooter({ text: "©️ CreativeHub hosted by Trujca.gg" })
-                    .setTimestamp(),
-            ],
-        });
+        await interaction.reply({ embeds: [embed] });
+    } catch (error) {
+        console.error("Error handling interaction:", error);
+        await interaction.reply({ content: "Wystąpił błąd.", ephemeral: true });
     }
 });
 
-client.login(TOKEN);
+
+
+client.login("");
+
+
+
+
